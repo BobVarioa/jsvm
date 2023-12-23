@@ -3,7 +3,7 @@
 A "javascript" "vm" project. Currently this is very imcomplete, but the goal for this project is to create something that turns a subset of javascript into jvm bytecode currently, but eventually different formats as well.
 
 ## Rationale
-This project came about as somewhat a joke (js -> java) and somewhat something I've really wanted to do for a large period of time. I've noticed in the Javascript ecosystem many people will ignore performance as a whole, leading to the overbloated and incredibly slow web (especially on lower end machines). This project, in a sense, seeks to remedy some of that, and make the web (or nodejs, etc.) faster and moire versitile. 
+This project came about as somewhat a joke (js -> java) and somewhat something I've really wanted to do for a large period of time. I've noticed in the Javascript ecosystem many people will ignore performance as a whole, leading to the overbloated and incredibly slow web (especially on lower end machines). This project, in a sense, seeks to remedy some of that, and make the web (or nodejs, etc.) faster and more versitile. 
 
 ## Goals
 Eventually, I want this project to be completely compatible with all of javascript and beat V8 in terms of performance due to more strict typing, and other optimizations V8 simply can't make at runtime because of their cost.
@@ -99,3 +99,13 @@ Any features with a empty checkbox means they are currently in progress, any ful
 	- [ ] Purity checks?
 	- [ ] Turn datatypes into what they should be, i.e List -> Stack, Object -> Map, Object -> Set, etc.
 - [ ] Run typescript
+
+## Sources Referenced
+- https://docs.oracle.com/javase/specs/jvms/se8/html/index.html
+	- Complete JVM specification
+- https://rosettacode.org/wiki/Category:Basic_language_learning
+	- For examples to use as tests
+- https://developer.mozilla.org/en-US/
+	- To reference various Javascript quirks quickly 
+- https://tc39.es/ecma262/
+	- To reference various Javascript quirks, slowly 
