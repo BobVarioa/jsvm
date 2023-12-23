@@ -59,5 +59,6 @@ ast {
 	  | (lhs: value) (op: '**') (rhs: expression) #binop
 	  | (lhs: expression) (op: '%' | '*' | '/') (rhs: expression) #binop
 	  | (lhs: expression) (op: '+' | '-') (rhs: expression) #binop
-	  | (lhs: expression) (op: binary | compare | logical) (rhs: expression) #binop;
+	  | (lhs: expression) (op: binary | compare | logical) (rhs: expression) #binop
+	  | (cond: expression) '?' (consequent: expression) ':' (alternate: expression) #ternary;
 }
