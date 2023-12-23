@@ -31,7 +31,7 @@ function fromBEU4(num) {
 	return [d, c, b, a];
 }
 
-class LooseUint8Array {
+export class LooseUint8Array {
 	data;
 	view;
 	size;
@@ -47,11 +47,19 @@ class LooseUint8Array {
 	 *
 	 * @param {Buffer} buffer
 	 */
-	from(buffer) {
+	fromBuffer(buffer) {
 		this.resize(buffer.byteLength);
 		for (let i = 0; i < buffer.byteLength; i++) {
-			this.view[i] = buffer.readInt8(i);
+			this.view[i] = buffer.readUInt8(i);
 		}
+	}
+
+	toBuffer() {
+		let buff = Buffer.alloc(this.offset);
+		for (let i = 0; i < this.offset; i++) {
+			buff.writeUInt8(this.view[i], i);
+		}
+		return buff;
 	}
 
 	resize(n) {
@@ -75,8 +83,8 @@ class LooseUint8Array {
 				this.resize(this.size * 2);
 			}
 			let [a, b] = fromU2(bytes[i]);
-			this.view[this.offset] = a;
-			this.view[this.offset + 1] = b;
+			this.view[this.offset] = b;
+			this.view[this.offset + 1] = a;
 			this.offset += 2;
 		}
 	}
@@ -87,10 +95,10 @@ class LooseUint8Array {
 				this.resize(this.size * 2);
 			}
 			let [a, b, c, d] = u4(bytes[i]);
-			this.view[this.offset] = a;
-			this.view[this.offset + 1] = b;
-			this.view[this.offset + 2] = c;
-			this.view[this.offset + 3] = d;
+			this.view[this.offset] = d;
+			this.view[this.offset + 1] = c;
+			this.view[this.offset + 2] = b;
+			this.view[this.offset + 3] = a;
 			this.offset += 4;
 		}
 	}
@@ -126,7 +134,7 @@ class LooseUint8Array {
 	}
 }
 
-const ReferenceKind = {
+export const ReferenceKind = {
 	REF_getField: 1,
 	REF_getStatic: 2,
 	REF_putField: 3,
@@ -138,14 +146,23 @@ const ReferenceKind = {
 	REF_invokeInterface: 9,
 };
 
-const AccessFlags = {
+export const AccessFlags = {
+	File_Public: 0x0001,
+	File_Final: 0x0010,
+	File_Super: 0x0020,
+	File_Interface: 0x0200,
+	File_Abstract: 0x0400,
+	File_Synthetic: 0x1000,
+	File_Annotation: 0x2000,
+	File_Enum: 0x4000,
+
 	Class_Public: 0x0001,
 	Class_Private: 0x0002,
 	Class_Protected: 0x0004,
 	Class_Static: 0x0008,
 	Class_Final: 0x0010,
-	Class_Volatile: 0x0040,
-	Class_Transient: 0x0080,
+	Class_Interface: 0x0200,
+	Class_Abstract: 0x0400,
 	Class_Synthetic: 0x1000,
 	Class_Annotation: 0x2000,
 	Class_Enum: 0x4000,
@@ -168,35 +185,38 @@ const AccessFlags = {
 	Method_Synchronized: 0x0020,
 	Method_Bridge: 0x0040,
 	Method_Varargs: 0x0080,
-	Method_NATIVE: 0x0100,
-	Method_ABSTRACT: 0x0400,
-	Method_ABSTRACT: 0x0800,
+	Method_Native: 0x0100,
+	Method_Abstract: 0x0400,
+	Method_Strict: 0x0800,
 	Method_Synthetic: 0x1000,
 };
 
 const Constants = {
-	Constant_Class: 7,
-	Constant_Fieldref: 9,
-	Constant_Methodref: 10,
-	Constant_InterfaceMethodref: 11,
-	Constant_String: 8,
-	Constant_Integer: 3,
-	Constant_Float: 4,
-	Constant_Long: 5,
-	Constant_Double: 6,
-	Constant_NameAndType: 12,
-	Constant_Utf8: 1,
-	Constant_MethodHandle: 15,
-	Constant_MethodType: 16,
-	Constant_InvokeDynamic: 18,
+	Class: 7,
+	Fieldref: 9,
+	Methodref: 10,
+	InterfaceMethodref: 11,
+	String: 8,
+	Integer: 3,
+	Float: 4,
+	Long: 5,
+	Double: 6,
+	NameAndType: 12,
+	Utf8: 1,
+	MethodHandle: 15,
+	MethodType: 16,
+	InvokeDynamic: 18,
 };
 
 const ConstantsById = Object.fromEntries(
 	Object.entries(Constants).map((v) => [v[1], v[0]])
 );
 
+/**
+ * @type {Record<number, {generate: (...args) => ((file: LooseUint8Array) => void), read: (file: LooseUint8Array) => any}>}
+ */
 const ConstantTypes = {
-	[Constants.Constant_Class]: {
+	[Constants.Class]: {
 		generate(name_index) {
 			return (file) => {
 				file.push_u2(name_index);
@@ -208,7 +228,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_Fieldref]: {
+	[Constants.Fieldref]: {
 		generate(class_index, name_and_type_index) {
 			return (file) => {
 				file.push_u2(class_index);
@@ -222,7 +242,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_Methodref]: {
+	[Constants.Methodref]: {
 		generate(class_index, name_and_type_index) {
 			return (file) => {
 				file.push_u2(class_index);
@@ -236,7 +256,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_InterfaceMethodref]: {
+	[Constants.InterfaceMethodref]: {
 		generate(class_index, name_and_type_index) {
 			return (file) => {
 				file.push_u2(class_index);
@@ -250,7 +270,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_String]: {
+	[Constants.String]: {
 		generate(string_index) {
 			return (file) => {
 				file.push_u2(string_index);
@@ -262,7 +282,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_Integer]: {
+	[Constants.Integer]: {
 		generate(bytes) {
 			return (file) => {
 				file.push_u4(bytes);
@@ -274,7 +294,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_Float]: {
+	[Constants.Float]: {
 		generate(bytes) {
 			return (file) => {
 				file.push_u4(bytes);
@@ -286,7 +306,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_Double]: {
+	[Constants.Double]: {
 		generate(high_bytes, low_bytes) {
 			return (file) => {
 				file.push_u4(high_bytes);
@@ -300,7 +320,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_NameAndType]: {
+	[Constants.NameAndType]: {
 		generate(name_index, descriptor_index) {
 			return (file) => {
 				file.push_u2(name_index);
@@ -314,7 +334,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_Utf8]: {
+	[Constants.Utf8]: {
 		generate(str) {
 			return (file) => {
 				let code = Array.from(str).map((v) => v.codePointAt(0));
@@ -333,7 +353,7 @@ const ConstantTypes = {
 				.join("");
 		},
 	},
-	[Constants.Constant_MethodHandle]: {
+	[Constants.MethodHandle]: {
 		generate(reference_kind, reference_index) {
 			return (file) => {
 				file.push_u1(ReferenceKind[reference_kind]);
@@ -347,7 +367,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_MethodType]: {
+	[Constants.MethodType]: {
 		generate(descriptor_index) {
 			return (file) => {
 				file.push_u2(descriptor_index);
@@ -359,7 +379,7 @@ const ConstantTypes = {
 			};
 		},
 	},
-	[Constants.Constant_InvokeDynamic]: {
+	[Constants.InvokeDynamic]: {
 		generate(bootstrap_method_attr_index, name_and_type_index) {
 			return (file) => {
 				file.push_u2(bootstrap_method_attr_index);
@@ -408,16 +428,18 @@ const Attributes = {
 						2 +
 						// code length
 						4 +
-						// code
-						1 * code.length +
 						// exception table length
-						+2;
-					// exception table
-					8 * exception_table.length +
+						2 +
+						// exception table
+						8 * exception_table.length +
 						// attributes length
 						2;
+					for (const c of code) {
+						size += 1 + c.size;
+					}
+
 					for (const a of attributes) {
-						size += a.size();
+						size += 6 + a.size();
 					}
 					return size;
 				},
@@ -425,9 +447,12 @@ const Attributes = {
 					file.push_u2(max_stack);
 					file.push_u2(max_locals);
 
-					file.push_u4(code.length);
+					file.push_u4(code.reduce((p, v) => p + 1 + v.size, 0));
 					for (const c of code) {
-						file.push_u1(c);
+						file.push_u1(c.opcode);
+						if (c.write) {
+							c.write(file);
+						}
 					}
 
 					file.push_u2(exception_table.length);
@@ -889,7 +914,7 @@ const Attributes = {
 	},
 };
 
-const Opcodes = {
+const Opcodes = /** @type {const} */ ({
 	0: "nop",
 	1: "aconst_null",
 	2: "iconst_m1",
@@ -1095,14 +1120,14 @@ const Opcodes = {
 	202: "breakpoint",
 	254: "impdep1",
 	255: "impdep2",
-};
+});
 
 const OpcodesById = Object.fromEntries(
 	Object.entries(Opcodes).map((v) => [v[1], parseInt(v[0])])
 );
 
 /**
- * @type {Record<string, { read: (file: LooseUint8Array) => any }>}
+ * @type {Record<Opcodes[keyof Opcodes], { read: (file: LooseUint8Array) => any }>}
  */
 const OpcodesType = {
 	aaload: {},
@@ -2013,7 +2038,7 @@ function readAttribute(file, constants) {
 
 function readString(index, constants) {
 	let tag = constants[index - 1];
-	if (tag.tag != Constants.Constant_Utf8) {
+	if (tag.tag != Constants.Utf8) {
 		throw new Error("wrong tag type");
 	}
 	return tag.data;
@@ -2021,7 +2046,7 @@ function readString(index, constants) {
 
 function readClass(index, constants) {
 	let tag = constants[index - 1];
-	if (tag.tag != Constants.Constant_Class) {
+	if (tag.tag != Constants.Class) {
 		throw new Error("wrong tag type");
 	}
 	return {
@@ -2035,7 +2060,32 @@ function readClass(index, constants) {
  * @type {{ index: number, size: () => number, write: (file: LooseUint8Array) => void }}
  */
 
-class ClassFile {
+/**
+ *
+ * @template T
+ * @param {T} obj
+ * @param {keyof T} key
+ */
+function declareCached(obj, key) {
+	/**
+	 * @type {Function<any, any>}
+	 */
+	const method = obj[key];
+	const cache = new Map();
+
+	obj[key] = (...args) => {
+		let json = JSON.stringify(args); // 😬
+		let value = cache.get(json);
+		if (value != undefined) {
+			return value;
+		}
+		value = method.apply(obj, args);
+		cache.set(json, value);
+		return value;
+	};
+}
+
+export class ClassFile {
 	minor_version = 0;
 	major_version = 61;
 
@@ -2055,82 +2105,74 @@ class ClassFile {
 	attributes = [];
 
 	constructor() {
-		Object.defineProperty(this, "utf8map", { enumerable: false });
-
-		for (const [key, value] of Object.entries(Constants)) {
-			ClassFile[`add${key}`] =
-				ClassFile.genConstantMethod(value).bind(this);
-		}
-
-		for (const key of Object.keys(Attributes)) {
-			ClassFile[`createAttribute_${key}`] =
-				ClassFile.genAttributeMethod(key).bind(this);
-		}
-
-		for (const [key, value] of Object.entries(Opcodes)) {
-			ClassFile[`createBytecode_${value}`] =
-				ClassFile.genBytecodeMethod(value).bind(this);
-		}
+		declareCached(this, "createUtf8");
+		declareCached(this, "createClassInfo");
+		declareCached(this, "createNameAndType");
+		declareCached(this, "createFieldRef");
+		declareCached(this, "createMethodRef");
+		declareCached(this, "createString");
 	}
 
 	/**
 	 *
-	 * @param {keyof Constants} tag
-	 * @param {(file: LooseUint8Array) => void} write
-	 * @returns the index into the constant pool
+	 * @param {keyof Constants} id
+	 * @param  {...any} args
+	 * @returns
 	 */
-	static genConstantMethod(tag) {
-		return (...args) => {
-			return this.constants.push({
-				tag,
-				write: ConstantTypes[tag].generate(...args),
-			}); // constants pool is 1 indexed, len -> index
-		};
+	addConstant(id, ...args) {
+		return this.constants.push({
+			name: id,
+			tag: Constants[id],
+			index: this.constants.length + 1,
+			write: ConstantTypes[Constants[id]].generate(...args),
+		}); // constants pool is 1 indexed, len -> index
 	}
 
-	static genAttributeMethod(str) {
-		return (...args) => {
-			let res = Attributes[str].generate(...args);
-			res.index = this.createUtf8(str);
-			return res;
-		};
+	/**
+	 *
+	 * @param {keyof Attributes} id
+	 * @param  {...any} args
+	 * @returns
+	 */
+	createAttribute(id, ...args) {
+		let res = Attributes[id].generate(...args);
+		res.index = this.createUtf8(id);
+		return res;
 	}
 
-	static genBytecodeMethod(str) {
-		return (...args) => {
-			const op = OpcodesType[str];
-			let res =
-				typeof op.generate == "function" ? op.generate(...args) : {};
-			res.opcode = OpcodesById[str];
-			res.name = str;
-			return res;
-		};
+	/**
+	 *
+	 * @param {Opcodes[keyof Opcodes]} id
+	 * @param  {...any} args
+	 * @returns
+	 */
+	createBytecode(id, ...args) {
+		const op = OpcodesType[id];
+		let res =
+			typeof op.generate == "function"
+				? { write: op.generate(...args) }
+				: {};
+		res.opcode = OpcodesById[id];
+		res.name = id;
+		res.size = op.size? op.size() : 0;
+		return res;
 	}
-
-	utf8map = {};
 
 	createUtf8(str) {
-		if (!this.utf8map[str]) {
-			const c = this.addConstant_Utf8(str);
-			this.utf8map[str] = c;
-			return c;
-		}
-		return this.utf8map[str];
+		return this.addConstant("Utf8", str);
 	}
 
 	setThisClass(descriptor) {
-		this.this_class_index = this.addConstant_Class(
-			this.createUtf8(descriptor)
-		);
+		this.this_class_index = this.createClassInfo(descriptor);
+		this.this_class = descriptor;
 	}
 
 	setSuperClass(descriptor) {
-		this.super_class_index = this.addConstant_Class(
-			this.createUtf8(descriptor)
-		);
+		this.super_class_index = this.createClassInfo(descriptor);
+		this.super_class = descriptor;
 	}
 
-	addField_info(access_flags, name_index, descriptor_index, attributes) {
+	addField(access_flags, name_index, descriptor_index, attributes) {
 		this.fields.push({
 			access_flags,
 			name_index,
@@ -2139,12 +2181,23 @@ class ClassFile {
 		});
 	}
 
-	addMethod_info(access_flags, name_index, descriptor_index, attributes) {
-		this.fields.push({
+	addMethodRaw(access_flags, name_index, descriptor_index, attributes) {
+		this.methods.push({
 			access_flags,
 			name_index,
 			descriptor_index,
 			attributes,
+		});
+	}
+
+	addMethod(access_flags, name, retType, args, attrs) {
+		this.methods.push({
+			access_flags,
+			name_index: this.createUtf8(name),
+			descriptor_index: this.createUtf8(
+				this.createMethodDescriptor(retType, args)
+			),
+			attributes: attrs,
 		});
 	}
 
@@ -2210,6 +2263,98 @@ class ClassFile {
 		return { name_index, access_flags };
 	}
 
+	createFieldDescriptor(str) {
+		switch (str) {
+			case "byte":
+				return "B";
+			case "char":
+				return "C";
+			case "double":
+				return "D";
+			case "float":
+				return "F";
+			case "int":
+				return "I";
+			case "long":
+				return "J";
+			case "short":
+				return "S";
+			case "boolean":
+				return "Z";
+			case "void":
+				return "V";
+			default: {
+				if (str.endsWith("[]")) {
+					return "[" + this.createFieldDescriptor(str.slice(0, -2));
+				}
+				return "L" + str.replaceAll(".", "/") + ";";
+			}
+		}
+	}
+
+	createMethodDescriptor(retType, args) {
+		let str = "(";
+		for (let i = 0; i < args.length; i++) {
+			str += this.createFieldDescriptor(args[i]);
+		}
+		str += ")";
+		str += this.createFieldDescriptor(retType);
+		return str;
+	}
+
+	createClassInfo(str) {
+		return this.addConstant(
+			"Class",
+			this.addConstant("Utf8", str.replaceAll(".", "/"))
+		);
+	}
+
+	createNameAndType(name, type) {
+		return this.addConstant(
+			"NameAndType",
+			this.createUtf8(name.replaceAll(".", "/")),
+			this.createUtf8(type)
+		);
+	}
+
+	createCode(max_stack, max_locals, code, attributes = []) {
+		return this.createAttribute(
+			"Code",
+			max_stack,
+			max_locals,
+			code,
+			[],
+			attributes
+		);
+	}
+
+	createFieldRef(clazz, name, type) {
+		return this.addConstant(
+			"Fieldref",
+			this.createClassInfo(clazz),
+			this.createNameAndType(name, this.createFieldDescriptor(type))
+		);
+	}
+
+	createMethodRef(clazz, name, retType, args) {
+		return this.addConstant(
+			"Methodref",
+			this.createClassInfo(clazz),
+			this.createNameAndType(
+				name,
+				this.createMethodDescriptor(retType, args)
+			)
+		);
+	}
+
+	createString(str) {
+		return this.addConstant("String", this.createUtf8(str));
+	}
+
+	addAttribute(attr) {
+		this.attributes.push(attr);
+	}
+
 	generate() {
 		let file = new LooseUint8Array();
 
@@ -2269,7 +2414,7 @@ class ClassFile {
 			writeAttribute(file, a);
 		}
 
-		return Buffer.from(file);
+		return file.toBuffer();
 	}
 
 	read(file) {
@@ -2278,12 +2423,12 @@ class ClassFile {
 		this.minor_version = file.shift_u2();
 		this.major_version = file.shift_u2();
 
-		let constant_pool_length = file.shift_u2() - 1;
+		let pool_length = file.shift_u2() - 1;
 		let constants = [];
-		for (let i = 0; i < constant_pool_length; i++) {
+		for (let i = 0; i < pool_length; i++) {
 			const tag = file.shift_u1();
 			constants.push({
-				index: i,
+				index: i + 1,
 				tag,
 				name: ConstantsById[tag],
 				data: ConstantTypes[tag].read(file),
@@ -2356,14 +2501,10 @@ class ClassFile {
 		}
 		this.attributes = attributes;
 	}
-}
 
-let file = fs.readFileSync("./samples/HelloWorld.class");
-const data = new LooseUint8Array();
-data.from(file);
-const classFile = new ClassFile();
-classFile.read(data);
-fs.writeFileSync(
-	"./samples/HelloWorld.class.json",
-	JSON.stringify(classFile, (k, v) => (v instanceof ArrayBuffer ? [...v] : v))
-);
+	toJson() {
+		return JSON.stringify(this, (k, v) =>
+			v instanceof ArrayBuffer ? [...v] : v
+		);
+	}
+}

@@ -131,3 +131,5 @@ dist
 
 # ignore generated files
 build
+jvm/lib/*.class
+jvm/lib/*.class.json
