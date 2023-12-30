@@ -134,3 +134,5 @@ bnf/build/**
 tests/build/**
 jvm/lib/*.class
 jvm/lib/*.class.json
+jvm/samples/*.class
+jvm/samples/*.class.json 
