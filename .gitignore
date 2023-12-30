@@ -130,6 +130,7 @@ dist
 .pnp.*
 
 # ignore generated files
-bnf/build
+bnf/build/**
+tests/build/**
 jvm/lib/*.class
 jvm/lib/*.class.json

@@ -8,13 +8,14 @@ function json(s) {
 	return JSON.stringify(s, (k, v) => (v instanceof Set ? [...v] : v), 4);
 }
 
-let ast = new EBNF();
-let parse = ast.parse(file);
+const bnf = new EBNF();
+const parse = bnf.parse(file);
 fs.writeFileSync("./build/bnf.json", json(parse));
 
-let intTokens = new EBNFTokenizer(parse);
-let tokens = intTokens.run(file2);
+const intTokens = new EBNFTokenizer(parse);
+const tokens = intTokens.run(file2);
 fs.writeFileSync("./build/tokens.json", json(tokens));
 
-let intAst = new EBNFAst(parse);
-fs.writeFileSync("./build/ast.json", json(intAst.run(tokens)));
+const intAst = new EBNFAst(parse);
+const ast = intAst.run(tokens);
+fs.writeFileSync("./build/ast.json", json(ast));

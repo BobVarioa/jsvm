@@ -34,14 +34,14 @@ ast {
 	statement = 
 		(content: declaration) ';' #declaration
 		| 'if' '(' (expr: expression) ')' '{' (body: statement*) '}' #if
+		| 'for' '(' (init: declaration | expression) ';' (test: expression) ';' (after: expression) ')' '{' (body: statement*) '}' #for
 		| (content: expression)  ';' #expression
 		| ";" #empty;
 
 	declaration = 
 		'var' (name: id) '=' (expr: expression)   #var
 	  | 'let' (name: id) '=' (expr: expression)   #let
-	  | 'const' (name: id) '=' (expr: expression) #const
-	  | (name: id) (op: assignment) (expr: expression) #assign;
+	  | 'const' (name: id) '=' (expr: expression) #const;
 
 	value =
 		(value: number) #number
@@ -50,15 +50,19 @@ ast {
 	  | (name: id) #variable
 	  | '(' (expr: expression) ')' #group;
 
-	// 3-4-5
+	arg = (expr: expression) ",";
+
 	expression =
-	    (op: unaryops) (expr: value) #unary_front
+	    (op: unaryops | add) (expr: value) #unary_front
 	  | (name: id) '--' #decrement_back
 	  | (name: id) '++' #increment_back
+	  // TODO: arguments *sigh*
+	  | (name: id) "(" (last: expression) ")" #call
+	  | (name: id) (op: assignment) (expr: expression) #assign
 	  | value
 	  | (lhs: value) (op: '**') (rhs: expression) #binop
 	  | (lhs: expression) (op: '%' | '*' | '/') (rhs: expression) #binop
 	  | (lhs: expression) (op: '+' | '-') (rhs: expression) #binop
-	  | (lhs: expression) (op: binary | compare | logical) (rhs: expression) #binop
-	  | (cond: expression) '?' (consequent: expression) ':' (alternate: expression) #ternary;
+	  | (lhs: expression) (op: binary | compare | logical) (rhs: expression) #binop;
+	  // | (cond: expression) '?' (consequent: expression) ':' (alternate: expression) #ternary;
 }

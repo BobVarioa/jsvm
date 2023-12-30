@@ -326,7 +326,11 @@ export class EBNF {
 						rules.push(s);
 						s = stack.pop();
 					}
-					stack.push({ type: "group", rules, name: s.name });
+					stack.push({
+						type: "group",
+						rules: rules.reverse(),
+						name: s.name,
+					});
 					break;
 				default:
 					throw new ParseError("huh");
@@ -645,8 +649,10 @@ export class EBNFAst {
 	}
 
 	lastParsed = undefined;
+	nextTerminal = undefined;
 	referenceStack = [];
 	tokenIndex = 0;
+	loopableIds = new Set();
 
 	astRule(kind, tokens, list) {
 		let rules = toArray(list ?? this.astRules[kind]);
@@ -656,11 +662,35 @@ export class EBNFAst {
 			if (i == -1) return;
 			if (tokens.length - this.tokenIndex <= 0) return;
 			const r = rules[i];
+
+			const onId = (name) => {
+				this.referenceStack.unshift(name);
+				let res = this.astRule(name, tokens);
+				let type = this.referenceStack[0];
+				this.referenceStack.shift();
+				if (res) {
+					res.type = toSet(res.type);
+					res.type.add(type);
+					this.lastParsed = res;
+					if (this.loopableIds.has(name)) {
+						let last;
+						while (typeof res != "undefined") {
+							last = res;
+							res = onId(name);
+						}
+						res = last;
+					}
+					return res;
+				}
+				return;
+			}
+
 			switch (r.type) {
 				case "string":
 					if (tokens[this.tokenIndex].value == r.value) {
 						this.tokenIndex++;
 						i++;
+						this.lastParsed = undefined;
 						continue;
 					}
 					i--;
@@ -682,9 +712,9 @@ export class EBNFAst {
 					) {
 						// rules.length > 1 because if:
 						// expr = value | expr + value;
-						// value = number; 
+						// value = number;
 						// (or other such instances)
-						// then we'd enter an endless loop no matter what, bc if its by itself 
+						// then we'd enter an endless loop no matter what, bc if its by itself
 						// there, by definition, can't be more tokens to consume
 
 						if (this.lastParsed.type.has(r.value)) {
@@ -696,14 +726,8 @@ export class EBNFAst {
 					}
 
 					if (this.astRules[r.value]) {
-						this.referenceStack.unshift(r.value);
-						let res = this.astRule(r.value, tokens);
-						let type = this.referenceStack[0];
-						this.referenceStack.shift();
+						let res = onId(r.value);
 						if (res) {
-							res.type = toSet(res.type);
-							res.type.add(type);
-							this.lastParsed = res;
 							return res;
 						}
 						i--;
@@ -711,6 +735,7 @@ export class EBNFAst {
 					}
 
 					if (tokens[this.tokenIndex].type == r.value) {
+						this.lastParsed = undefined;
 						return tokens[this.tokenIndex++].value;
 					}
 
@@ -720,45 +745,60 @@ export class EBNFAst {
 				case "group": {
 					const rr = toArray(r.rules)[0];
 					if (rr.type == "id") {
-						if (
-							this.lastParsed &&
-							this.lastParsed.type.has(this.referenceStack[0]) 
-
-						) {
-							if (this.lastParsed.type.has(rr.value)) {
-								final[r.name] = this.lastParsed;
-								this.lastParsed = undefined;
-								i++;
+						if (this.astRules[rr.value]) {
+							if (
+								this.lastParsed &&
+								i == 0 &&
+								this.lastParsed.type.has(this.referenceStack[0])
+							) {
+								if (this.lastParsed.type.has(rr.value)) {
+									final[r.name] = this.lastParsed;
+									this.lastParsed = undefined;
+									i++;
+									continue;
+								}
+								i--;
 								continue;
 							}
-							i--;
-							continue;
-						}
 
-						
-						if (this.astRules[rr.value]) {
-							if (!this.lastParsed && rr.value == this.referenceStack[0] && this.referenceStack[0] == this.referenceStack[1]) {
+							if (
+								!this.lastParsed &&
+								rr.value == this.referenceStack[0]
+							) {
+								let maxParseDepth = 5;
+								let yes = true;
+								for (let j = 0; j < maxParseDepth - 1; j++) {
+									if (
+										this.referenceStack[j] !=
+										this.referenceStack[j + 1]
+									) {
+										yes = false;
+										break;
+									}
+								}
+
 								// prevent endless loop, we shouldn't really have nested ids
-								return;
+								if (yes) return;
 							}
 
-							this.referenceStack.unshift(rr.value);
-							let res = this.astRule(rr.value, tokens);
-							let type = this.referenceStack[0];
-							this.referenceStack.shift();
+							let res = onId(rr.value);
 							if (res) {
-								res.type = toSet(res.type);
-								res.type.add(type);
-								final[r.name] = res;
-								this.lastParsed = res;
+								let last;
+								while (typeof res != "undefined") {
+									last = res;
+									res = onId(rr.value);
+								}
+								final[r.name] = last;
 								i++;
 								continue;
 							}
 							return;
 						}
-						
-						
-						if (tokens[this.tokenIndex].type == rr.value) {
+
+						if (
+							typeof this.lastParsed == "undefined" &&
+							tokens[this.tokenIndex].type == rr.value
+						) {
 							final[r.name] = tokens[this.tokenIndex++].value;
 							i++;
 							continue;
@@ -769,7 +809,10 @@ export class EBNFAst {
 					}
 
 					if (rr.type == "string") {
-						if (tokens[this.tokenIndex].value == rr.value) {
+						if (
+							typeof this.lastParsed == "undefined" &&
+							tokens[this.tokenIndex].value == rr.value
+						) {
 							final[r.name] = tokens[this.tokenIndex++].value;
 							i++;
 							continue;
@@ -780,16 +823,18 @@ export class EBNFAst {
 
 					if (rr.type == "repeat") {
 						let arr = [];
+						let lp = this.lastParsed;
 						while (true) {
-							this.lastParsed = undefined; 
+							this.lastParsed = undefined;
 							// clear lastParsed before iteration, bc it *shouldn't* be necessary
-							// for instance, think about what happens between statements, well you 
+							// for instance, think about what happens between statements, well you
 							// can't exactly go back to the previous one because how this is structured
 							// so in all honesty lastParsed can't be here, cuz it causes bugs
 							let res = this.astRule(kind, tokens, [rr.rules]);
 							if (!res) break;
 							arr.push(res);
 						}
+						this.lastParsed = lp;
 						if (arr.length != 0) {
 							final[r.name] = arr;
 							i++;
@@ -847,6 +892,8 @@ export class EBNFAst {
 		}
 
 		return final;
+
+		
 	}
 
 	astRules = {};
@@ -1136,6 +1183,8 @@ export class EBNFAst {
 		if (this.lock) throw new ParseError("stop it");
 		this.lock = true;
 
+		// TODO: hardcoded....
+		this.loopableIds.add("expression")
 		let ast = this.astRule("file", [...tokens]);
 		ast.type = "file";
 

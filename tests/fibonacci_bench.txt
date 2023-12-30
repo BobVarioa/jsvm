@@ -1,0 +1,24 @@
+
+Command: "java -noverify Fibonacci"
+  - print    x 10000000
+  Time (m:ss): 0:03.65 
+  - no print x 100000000
+  Time (m:ss): 0:00.10
+  - no print x 1000000000
+  Time (m:ss): 0:00.52
+  - no print x 10000000000
+  Time (m:ss): 0:05.03
+  - no print x 100000000000
+  Time (m:ss): 0:50.56
+
+Command: "node ./tests/fibonacci.js"
+  - print    x 10000000
+  Time (m:ss): 0:16.98
+  - no print x 100000000
+  Time (m:ss): 0:00.18
+  - no print x 1000000000
+  Time (m:ss): 0:00.99
+  - no print x 10000000000
+  Time (m:ss): 0:10.26
+  - no print x 100000000000
+  Time (m:ss): 1:41.34

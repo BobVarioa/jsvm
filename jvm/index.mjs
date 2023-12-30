@@ -3,34 +3,6 @@ import os from "node:os";
 
 const ENDIANNESS = os.endianness();
 
-let fromU2 = ENDIANNESS == "LE" ? fromLEU2 : fromBEU2;
-function fromLEU2(num) {
-	let a = num & 0xff;
-	let b = num >> 8;
-	return [a, b];
-}
-function fromBEU2(num) {
-	let a = num & 0xff;
-	let b = num >> 8;
-	return [b, a];
-}
-
-let u4 = ENDIANNESS == "LE" ? fromLEU4 : fromBEU4;
-function fromLEU4(num) {
-	let a = (num >> 0) & 0xff;
-	let b = (num >> 8) & 0xff;
-	let c = (num >> 16) & 0xff;
-	let d = (num >> 24) & 0xff;
-	return [a, b, c, d];
-}
-function fromBEU4(num) {
-	let a = (num >> 0) & 0xff;
-	let b = (num >> 8) & 0xff;
-	let c = (num >> 16) & 0xff;
-	let d = (num >> 24) & 0xff;
-	return [d, c, b, a];
-}
-
 export class LooseUint8Array {
 	data;
 	view;
@@ -40,7 +12,7 @@ export class LooseUint8Array {
 	constructor() {
 		this.size = 8;
 		this.data = new ArrayBuffer(this.size, { maxByteLength: 2 ** 32 });
-		this.view = new Uint8Array(this.data);
+		this.view = new DataView(this.data);
 	}
 
 	/**
@@ -50,14 +22,14 @@ export class LooseUint8Array {
 	fromBuffer(buffer) {
 		this.resize(buffer.byteLength);
 		for (let i = 0; i < buffer.byteLength; i++) {
-			this.view[i] = buffer.readUInt8(i);
+			this.view.setUint8(i, buffer.readUInt8(i));
 		}
 	}
 
 	toBuffer() {
 		let buff = Buffer.alloc(this.offset);
 		for (let i = 0; i < this.offset; i++) {
-			buff.writeUInt8(this.view[i], i);
+			buff.writeUInt8(this.view.getUint8(i), i);
 		}
 		return buff;
 	}
@@ -69,36 +41,30 @@ export class LooseUint8Array {
 
 	push_u1(...bytes) {
 		for (let i = 0; i < bytes.length; i++) {
-			if (this.offset >= this.size) {
+			if (this.offset + 1 >= this.size) {
 				this.resize(this.size * 2);
 			}
-			this.view[this.offset] = bytes[i];
+			this.view.setUint8(this.offset, bytes[i]);
 			this.offset++;
 		}
 	}
 
 	push_u2(...bytes) {
 		for (let i = 0; i < bytes.length; i++) {
-			if (this.offset >= this.size) {
+			if (this.offset + 2 >= this.size) {
 				this.resize(this.size * 2);
 			}
-			let [a, b] = fromU2(bytes[i]);
-			this.view[this.offset] = b;
-			this.view[this.offset + 1] = a;
+			this.view.setUint16(this.offset, bytes[i]);
 			this.offset += 2;
 		}
 	}
 
 	push_u4(...bytes) {
 		for (let i = 0; i < bytes.length; i++) {
-			if (this.offset >= this.size) {
+			if (this.offset + 4 >= this.size) {
 				this.resize(this.size * 2);
 			}
-			let [a, b, c, d] = u4(bytes[i]);
-			this.view[this.offset] = d;
-			this.view[this.offset + 1] = c;
-			this.view[this.offset + 2] = b;
-			this.view[this.offset + 3] = a;
+			this.view.setUint32(this.offset, bytes[i]);
 			this.offset += 4;
 		}
 	}
@@ -106,25 +72,39 @@ export class LooseUint8Array {
 	rev_offset = 0;
 
 	shift_u1() {
-		let byte = this.view[this.rev_offset];
+		let byte = this.view.getUint8(this.rev_offset);
+		this.rev_offset++;
+		return byte;
+	}
+
+	shift_s1() {
+		let byte = this.view.getInt8(this.rev_offset);
 		this.rev_offset++;
 		return byte;
 	}
 
 	shift_u2() {
-		let a = this.view[this.rev_offset];
-		let b = this.view[this.rev_offset + 1];
+		let byte = this.view.getUint16(this.rev_offset);
 		this.rev_offset += 2;
-		return ((a >> 8) | b) >>> 0;
+		return byte;
+	}
+
+	shift_s2() {
+		let byte = this.view.getInt16(this.rev_offset);
+		this.rev_offset += 2;
+		return byte;
 	}
 
 	shift_u4() {
-		let a = this.view[this.rev_offset + 0];
-		let b = this.view[this.rev_offset + 1];
-		let c = this.view[this.rev_offset + 2];
-		let d = this.view[this.rev_offset + 3];
+		let byte = this.view.getUint32(this.rev_offset);
 		this.rev_offset += 4;
-		return ((a << 24) | (b << 16) | (c << 8) | d) >>> 0;
+		return byte;
+	}
+
+	shift_s4() {
+		let byte = this.view.getInt32(this.rev_offset);
+		this.rev_offset += 4;
+		return byte;
 	}
 
 	shift_bytes(n) {
@@ -134,17 +114,21 @@ export class LooseUint8Array {
 	}
 }
 
-export const ReferenceKind = {
-	REF_getField: 1,
-	REF_getStatic: 2,
-	REF_putField: 3,
-	REF_putStatic: 4,
-	REF_invokeVirtual: 5,
-	REF_invokeStatic: 6,
-	REF_invokeSpecial: 7,
-	REF_newInvokeSpecial: 8,
-	REF_invokeInterface: 9,
-};
+export const ReferenceKind = /** @type {const} */ ({
+	getField: 1,
+	getStatic: 2,
+	putField: 3,
+	putStatic: 4,
+	invokeVirtual: 5,
+	invokeStatic: 6,
+	invokeSpecial: 7,
+	newInvokeSpecial: 8,
+	invokeInterface: 9,
+});
+
+const ReferenceKindById = Object.fromEntries(
+	Object.entries(ReferenceKind).map((v) => [v[1], v[0]])
+);
 
 export const AccessFlags = {
 	File_Public: 0x0001,
@@ -335,18 +319,73 @@ const ConstantTypes = {
 		},
 	},
 	[Constants.Utf8]: {
+		// prettier-ignore
 		generate(str) {
 			return (file) => {
 				let code = Array.from(str).map((v) => v.codePointAt(0));
-				file.push_u2(code.length);
-				file.push_u1(...code);
+				let rep = []
+
+				for (let i = 0; i < code.length; i++) {
+					const pt = code[i];
+					
+					if (0x01 <= pt && pt <= 0x7f) {
+						rep.push(0b0000_0000 | (pt & 0b0000_0000_0111_1111)) // 6-0
+					} else if (0x80 <= pt && pt <= 0x7ff) {
+						rep.push(0b1100_0000 | (pt & 0b0000_0111_1100_0000)) // 10-6
+						rep.push(0b1000_0000 | (pt & 0b0000_0000_0011_1111)) // 5-0
+					} else if (0x800 <= pt && pt <= 0xffff) {
+						rep.push(0b1110_0000 | (pt & 0b1111_0000_0000_0000)) // 15-12
+						rep.push(0b1000_0000 | (pt & 0b0000_1111_1100_0000)) // 11-6
+						rep.push(0b1000_0000 | (pt & 0b0000_0000_0011_1111)) // 5-0
+					} else if (0xffff <= pt) {
+						rep.push(0b1110_1101) // marker
+						rep.push(0b1010_0000 | ((pt & 0b0000_0000_0001_1111_0000_0000_0000_0000)) - 1) // 20-16
+						rep.push(0b1000_0000 |  (pt & 0b0000_0000_0000_0000_1111_1100_0000_0000))       // 15-10
+						rep.push(0b1110_1101) // marker
+						rep.push(0b1010_0000 |  (pt & 0b0000_0000_0000_0000_0000_0011_1100_0000))       // 9-6
+						rep.push(0b1000_0000 |  (pt & 0b0000_0000_0000_0000_0000_0000_0011_1111))       // 5-0
+					}
+				}
+				
+				file.push_u2(rep.length);
+				file.push_u1(...rep);
 			};
 		},
+		// prettier-ignore
 		read(file) {
 			let length = file.shift_u2();
 			let arr = [];
 			for (let i = 0; i < length; i++) {
-				arr.push(file.shift_u1());
+				const code = file.shift_u1();
+
+				if (code <= 0b0111_1111) {
+					arr.push(code)
+				} else if ((code >> 5) == 0b110) {
+					let x = code           ;
+					let y = file.shift_u1();
+					i += 1;
+					
+					arr.push(((x & 0x1f) << 6) + (y & 0x3f))
+				} else if ((code >> 4) == 0b1110) {
+					let x = code           ;
+					let y = file.shift_u1();
+					let z = file.shift_u1();
+					i += 2;
+					
+					arr.push(((x & 0xf) << 12) + ((y & 0x3f) << 6) + (z & 0x3f))
+				} else if (code == 0b1110_1101) {
+					let u = code           ;
+					let v = file.shift_u1();
+					let w = file.shift_u1();
+					let x = file.shift_u1();
+					let y = file.shift_u1();
+					let z = file.shift_u1();
+					i += 5;
+
+					if (u != 0b1110_1101 || x != 0b1110_1101) throw new Error();
+
+					arr.push(0x10000 + ((v & 0x0f) << 16) + ((w & 0x3f) << 10) + ((y & 0x0f) << 6) + (z & 0x3f))
+				}
 			}
 			return Array.from(arr)
 				.map((v) => String.fromCodePoint(v))
@@ -361,10 +400,12 @@ const ConstantTypes = {
 			};
 		},
 		read(file) {
-			return {
+			const ref = {
 				reference_kind: file.shift_u1(),
 				reference_index: file.shift_u2(),
 			};
+			ref.reference_kind_name = ReferenceKindById[ref.reference_kind];
+			return ref;
 		},
 	},
 	[Constants.MethodType]: {
@@ -394,6 +435,117 @@ const ConstantTypes = {
 		},
 	},
 };
+
+export const StackMapTable = /** @type {const} */({
+	SAME: "SAME",
+	SAME_LOCALS_1_STACK_ITEM: "SAME_LOCALS_1_STACK_ITEM",
+	SAME_LOCALS_1_STACK_ITEM_EXTENDED: "SAME_LOCALS_1_STACK_ITEM_EXTENDED",
+	CHOP: "CHOP",
+	SAME_FRAME_EXTENDED: "SAME_FRAME_EXTENDED",
+	APPEND: "APPEND",
+	FULL_FRAME: "FULL_FRAME",
+});
+
+export const VerificationTypeInfo = /** @type {const} */ ({
+	Top: 0,
+	Integer: 1,
+	Float: 2,
+	Null: 5,
+	UninitializedThis: 6,
+	Object: 7,
+	Uninitialized: 8,
+	Long: 4,
+	Double: 3,
+});
+
+const VerificationTypeInfoById = Object.fromEntries(
+	Object.entries(VerificationTypeInfo).map((v) => [v[1], v[0]])
+);
+
+/**
+ *
+ * @param {LooseUint8Array} file
+ */
+function readVerificationTypeInfo(file) {
+	let obj = {};
+	let tag = file.shift_u1();
+
+	switch (tag) {
+		case VerificationTypeInfo.Top:
+		case VerificationTypeInfo.Integer:
+		case VerificationTypeInfo.Float:
+		case VerificationTypeInfo.Null:
+		case VerificationTypeInfo.UninitializedThis:
+		case VerificationTypeInfo.Long:
+		case VerificationTypeInfo.Double:
+			obj.tag = VerificationTypeInfoById[tag];
+			break;
+		case VerificationTypeInfo.Object:
+			obj.tag = VerificationTypeInfo.Object;
+			obj.cpool_index = file.shift_u2();
+			break;
+		case VerificationTypeInfo.Uninitialized:
+			obj.tag = VerificationTypeInfo.Uninitialized;
+			obj.offset = file.shift_u2();
+			break;
+		default:
+			throw new Error();
+	}
+
+	return obj;
+}
+
+/**
+ *
+ * @param {LooseUint8Array} file
+ * @param {*} obj
+ */
+function writeVerificationTypeInfo(file, obj) {
+	let tag = VerificationTypeInfo[obj.tag];
+
+	switch (tag) {
+		case VerificationTypeInfo.Top:
+		case VerificationTypeInfo.Integer:
+		case VerificationTypeInfo.Float:
+		case VerificationTypeInfo.Null:
+		case VerificationTypeInfo.UninitializedThis:
+		case VerificationTypeInfo.Long:
+		case VerificationTypeInfo.Double:
+			file.push_u1(tag);
+			break;
+		case VerificationTypeInfo.Object:
+			file.push_u1(tag);
+			file.push_u2(obj.cpool_index);
+			break;
+		case VerificationTypeInfo.Uninitialized:
+			file.push_u1(tag);
+			file.push_u2(obj.offset);
+			break;
+		default:
+			throw new Error();
+	}
+}
+
+function sizeVerificationTypeInfo(obj) {
+	let tag = VerificationTypeInfo[obj.tag];
+
+	switch (tag) {
+		case VerificationTypeInfo.Top:
+		case VerificationTypeInfo.Integer:
+		case VerificationTypeInfo.Float:
+		case VerificationTypeInfo.Null:
+		case VerificationTypeInfo.UninitializedThis:
+		case VerificationTypeInfo.Long:
+		case VerificationTypeInfo.Double:
+			return 1;
+		case VerificationTypeInfo.Object:
+			return 3;
+		case VerificationTypeInfo.Uninitialized:
+			return 3;
+		default:
+			throw new Error();
+	}
+}
 
 /**
  * @type {Record<string, {generate: (...args) =>{ size: () => number, write: (file: LooseUint8Array) => void }, read: (file: LooseUint8Array, constants: any[]) => any}>}
@@ -488,6 +640,7 @@ const Attributes = {
 						: {};
 				obj.opcode = opcode;
 				obj.name = name;
+				obj.i = i;
 				if (instruct.size) {
 					i += instruct.size();
 				}
@@ -518,17 +671,188 @@ const Attributes = {
 		},
 	},
 	StackMapTable: {
-		// TODO: finish (4.7.4)
 		generate(entries) {
 			return {
 				size() {
 					let size = 2;
+					for (let i = 0; i < entries.length; i++) {
+						const frame = entries[i];
+
+						switch (frame.frame_type) {
+							case StackMapTable.SAME:
+								size += 1;
+								break;
+							case StackMapTable.SAME_LOCALS_1_STACK_ITEM:
+								size += 1;
+								size += sizeVerificationTypeInfo(
+									frame.verification_type_info
+								);
+								break;
+							case StackMapTable.SAME_LOCALS_1_STACK_ITEM_EXTENDED:
+								size += 3;
+								size += sizeVerificationTypeInfo(
+									frame.verification_type_info
+								);
+								break;
+							case StackMapTable.CHOP:
+								size += 3;
+								break;
+							case StackMapTable.SAME_FRAME_EXTENDED:
+								size += 3;
+								break;
+							case StackMapTable.APPEND:
+								size += 3;
+								for (let i = 0; i < frame.k; i++) {
+									size += sizeVerificationTypeInfo(
+										frame.locals[i]
+									);
+								}
+								break;
+							case StackMapTable.FULL_FRAME:
+								size += 5;
+								for (let i = 0; i < frame.locals.length; i++) {
+									size += sizeVerificationTypeInfo(
+										frame.locals[i]
+									);
+								}
+								size += 2;
+								for (let i = 0; i < frame.stack.length; i++) {
+									size += sizeVerificationTypeInfo(
+										frame.stack[i]
+									);
+								}
+								break;
+							default:
+								throw new Error();
+						}
+					}
+					return size;
 				},
-				write(file) {},
+				write(file) {
+					file.push_u2(entries.length);
+					for (let i = 0; i < entries.length; i++) {
+						const frame = entries[i];
+
+						switch (frame.frame_type) {
+							case StackMapTable.SAME:
+								file.push_u1(frame.offset_delta);
+								break;
+							case StackMapTable.SAME_LOCALS_1_STACK_ITEM:
+								file.push_u1(frame.offset_delta + 64);
+								writeVerificationTypeInfo(
+									file,
+									frame.verification_type_info
+								);
+								break;
+							case StackMapTable.SAME_LOCALS_1_STACK_ITEM_EXTENDED:
+								file.push_u1(247);
+								file.push_u2(frame.offset_delta);
+								writeVerificationTypeInfo(
+									file,
+									frame.verification_type_info
+								);
+								break;
+							case StackMapTable.CHOP:
+								file.push_u1(248 + frame.k);
+								file.push_u2(frame.offset_delta);
+								break;
+							case StackMapTable.SAME_FRAME_EXTENDED:
+								file.push_u1(251);
+								file.push_u2(frame.offset_delta);
+								break;
+							case StackMapTable.APPEND:
+								file.push_u1(251 + frame.k);
+								file.push_u2(frame.offset_delta);
+								for (let i = 0; i < frame.k; i++) {
+									writeVerificationTypeInfo(
+										file,
+										frame.locals[i]
+									);
+								}
+								break;
+							case StackMapTable.FULL_FRAME:
+								file.push_u1(255);
+								file.push_u2(frame.offset_delta);
+								file.push_u2(frame.locals.length);
+								for (let i = 0; i < frame.locals.length; i++) {
+									writeVerificationTypeInfo(
+										file,
+										frame.locals[i]
+									);
+								}
+								file.push_u2(frame.stack.length);
+								for (let i = 0; i < frame.stack.length; i++) {
+									writeVerificationTypeInfo(
+										file,
+										frame.stack[i]
+									);
+								}
+								break;
+							default:
+								throw new Error();
+						}
+					}
+				},
 			};
 		},
 		read(file, constants) {
-			throw new Error();
+			let entries_length = file.shift_u2();
+			let entries = [];
+
+			for (let i = 0; i < entries_length; i++) {
+				const frame_type = file.shift_u1();
+				let obj = {};
+
+				if (frame_type >= 0 && frame_type <= 63) {
+					obj.frame_type = StackMapTable.SAME;
+					obj.offset_delta = frame_type;
+				} else if (frame_type >= 64 && frame_type <= 127) {
+					obj.frame_type = StackMapTable.SAME_LOCALS_1_STACK_ITEM;
+					obj.offset_delta = frame_type - 64;
+					obj.verification_type_info = readVerificationTypeInfo(file);
+				} else if (frame_type == 247) {
+					obj.frame_type =
+						StackMapTable.SAME_LOCALS_1_STACK_ITEM_EXTENDED;
+					obj.offset_delta = file.shift_u2();
+					obj.verification_type_info = readVerificationTypeInfo(file);
+				} else if (frame_type >= 248 && frame_type <= 250) {
+					obj.frame_type = StackMapTable.CHOP;
+					obj.k = 251 - frame_type;
+					obj.offset_delta = file.shift_u2();
+				} else if (frame_type == 251) {
+					obj.frame_type = StackMapTable.SAME_FRAME_EXTENDED;
+					obj.offset_delta = file.shift_u2();
+				} else if (frame_type >= 252 && frame_type <= 254) {
+					obj.frame_type = StackMapTable.APPEND;
+					let k = frame_type - 251;
+					obj.offset_delta = file.shift_u2();
+					let locals = [];
+					for (let i = 0; i < k; i++) {
+						locals.push(readVerificationTypeInfo(file));
+					}
+					obj.locals = locals;
+				} else if (frame_type == 255) {
+					obj.frame_type = StackMapTable.FULL_FRAME;
+					obj.offset_delta = file.shift_u2();
+					let number_of_locals = file.shift_u2();
+					let locals = [];
+					for (let i = 0; i < number_of_locals; i++) {
+						locals.push(readVerificationTypeInfo(file));
+					}
+					obj.locals = locals;
+
+					let number_of_stack_items = file.shift_u2();
+					let stack = [];
+					for (let i = 0; i < number_of_stack_items; i++) {
+						stack.push(readVerificationTypeInfo(file));
+					}
+					obj.stack = stack;
+				}
+
+				entries.push(obj);
+			}
+
+			return entries;
 		},
 	},
 	Exceptions: {
@@ -565,10 +889,10 @@ const Attributes = {
 				write(file) {
 					file.push_u2(classes.length);
 					for (const c of classes) {
-						file.push_u2(inner_class_info_index);
-						file.push_u2(outer_class_info_index);
-						file.push_u2(inner_name_index);
-						file.push_u2(inner_class_access_flags);
+						file.push_u2(c.inner_class_info_index);
+						file.push_u2(c.outer_class_info_index);
+						file.push_u2(c.inner_name_index);
+						file.push_u2(c.inner_class_access_flags);
 					}
 				},
 			};
@@ -577,12 +901,29 @@ const Attributes = {
 			let classes_len = file.shift_u2();
 			let classes = [];
 			for (let i = 0; i < classes_len; i++) {
-				classes.push({
+				const clazz = {
 					inner_class_info_index: file.shift_u2(),
 					outer_class_info_index: file.shift_u2(),
 					inner_name_index: file.shift_u2(),
 					inner_class_access_flags: file.shift_u2(),
-				});
+				};
+				if (clazz.inner_class_info_index != 0)
+					clazz.inner_class_info = readClass(
+						clazz.inner_class_info_index,
+						constants
+					);
+				if (clazz.outer_class_info_index != 0)
+					clazz.outer_class_info = readClass(
+						clazz.outer_class_info_index,
+						constants
+					);
+				if (clazz.inner_name_index != 0)
+					clazz.inner_name = readString(
+						clazz.inner_name_index,
+						constants
+					);
+
+				classes.push(clazz);
 			}
 			return classes;
 		},
@@ -883,6 +1224,8 @@ const Attributes = {
 
 				bootstrap_methods.push(obj);
 			}
+
+			return bootstrap_methods;
 		},
 	},
 	MethodParameters: {
@@ -1367,7 +1710,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { index: file.shift_u2() };
+			return { index: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1380,7 +1723,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { index: file.shift_u4() };
+			return { index: file.shift_s4() };
 		},
 		size() {
 			return 4;
@@ -1410,7 +1753,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1423,7 +1766,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1436,7 +1779,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1449,7 +1792,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1462,7 +1805,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1475,7 +1818,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1488,7 +1831,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1501,7 +1844,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1514,7 +1857,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1527,7 +1870,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1540,7 +1883,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1553,7 +1896,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1566,7 +1909,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1579,7 +1922,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1592,7 +1935,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1605,7 +1948,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1618,7 +1961,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { branch: file.shift_u2() };
+			return { branch: file.shift_s2() };
 		},
 		size() {
 			return 2;
@@ -1632,7 +1975,7 @@ const OpcodesType = {
 			};
 		},
 		read(file) {
-			return { index: file.shift_u1(), constant: file.shift_u1() };
+			return { index: file.shift_u1(), constant: file.shift_s1() };
 		},
 		size() {
 			return 2;
@@ -2111,6 +2454,8 @@ export class ClassFile {
 		declareCached(this, "createFieldRef");
 		declareCached(this, "createMethodRef");
 		declareCached(this, "createString");
+		declareCached(this, "createMethodHandle");
+		declareCached(this, "createInvokeDynamic");
 	}
 
 	/**
@@ -2154,7 +2499,7 @@ export class ClassFile {
 				: {};
 		res.opcode = OpcodesById[id];
 		res.name = id;
-		res.size = op.size? op.size() : 0;
+		res.size = op.size ? op.size() : 0;
 		return res;
 	}
 
@@ -2205,18 +2550,22 @@ export class ClassFile {
 		return { start_pc, end_pc, handler_pc, catch_type };
 	}
 
-	createInnerClass(
-		inner_class_info_index,
-		outer_class_info_index,
-		inner_name_index,
+	inner_classes = [];
+
+	addInnerClass(
+		outer_class_name,
+		inner_class_name,
 		inner_class_access_flags
 	) {
-		return {
-			inner_class_info_index,
-			outer_class_info_index,
-			inner_name_index,
+		const clazz = {
+			inner_class_info_index: this.createClassInfo(
+				outer_class_name + "$" + inner_class_name
+			),
+			outer_class_info_index: this.createClassInfo(outer_class_name),
+			inner_name_index: this.createUtf8(inner_class_name),
 			inner_class_access_flags,
 		};
+		return this.inner_classes.push(clazz) - 1;
 	}
 
 	createLineNumber(start_pc, line_number) {
@@ -2305,7 +2654,7 @@ export class ClassFile {
 	createClassInfo(str) {
 		return this.addConstant(
 			"Class",
-			this.addConstant("Utf8", str.replaceAll(".", "/"))
+			this.createUtf8(str.replaceAll(".", "/"))
 		);
 	}
 
@@ -2351,12 +2700,114 @@ export class ClassFile {
 		return this.addConstant("String", this.createUtf8(str));
 	}
 
+	/**
+	 *
+	 * @param {keyof ReferenceKind} reference_kind
+	 * @param {number} reference_index
+	 * @returns
+	 */
+	createMethodHandle(reference_kind, reference_index) {
+		return this.addConstant(
+			"MethodHandle",
+			reference_kind,
+			reference_index
+		);
+	}
+
+	/**
+	 * 
+	 * @param {keyof VerificationTypeInfo} tag 
+	 * @param {string} type 
+	 * @returns 
+	 */
+	createVerficationType(tag, type) {
+		let ret = { tag }
+		if (type) {
+			if (type.endsWith("[]")) {
+				ret.cpool_index = this.addConstant(
+					"Class",
+					this.createUtf8(this.createFieldDescriptor(type))
+				);
+			} else {
+				ret.cpool_index = this.createClassInfo(type);
+			}
+		}
+		return ret;
+	}
+
+	bootstrap_methods = [];
+
+	/**
+	 *
+	 * @param {string} name
+	 * @param {string} retType
+	 * @param {string[]} args
+	 * @param {keyof ReferenceKind} reference_kind
+	 * @param {string} class_name
+	 * @param {string} method_name
+	 * @param {string} retType2
+	 * @param {string[]} args2
+	 * @param {number[]} bootstrap_arguments
+	 * @returns
+	 */
+	createInvokeDynamic(
+		name,
+		retType,
+		args,
+		reference_kind,
+		class_name,
+		method_name,
+		retType2,
+		args2,
+		bootstrap_arguments
+	) {
+		let index = this.bootstrap_methods.push({
+			bootstrap_method_ref: this.createMethodHandle(
+				reference_kind,
+				this.createMethodRef(class_name, method_name, retType2, args2)
+			),
+			bootstrap_arguments,
+		});
+
+		return this.addConstant(
+			"InvokeDynamic",
+			index - 1,
+			this.createNameAndType(
+				name,
+				this.createMethodDescriptor(retType, args)
+			)
+		);
+	}
+
 	addAttribute(attr) {
 		this.attributes.push(attr);
 	}
 
+	/**
+	 * 
+	 * @param {keyof StackMapTable} frameType 
+	 * @param {*} offset_delta 
+	 * @param {*} locals 
+	 * @param {*} stack 
+	 */
+	createStackMapFrame(frameType, offset_delta, locals, stack) {
+		return {frame_type: StackMapTable[frameType], offset_delta, locals, stack}
+	}
+
 	generate() {
 		let file = new LooseUint8Array();
+
+		if (this.bootstrap_methods.length > 0) {
+			this.addAttribute(
+				this.createAttribute("BootstrapMethods", this.bootstrap_methods)
+			);
+		}
+
+		if (this.inner_classes.length > 0) {
+			this.addAttribute(
+				this.createAttribute("InnerClasses", this.inner_classes)
+			);
+		}
 
 		// magic bytes
 		file.push_u4(0xcafebabe);

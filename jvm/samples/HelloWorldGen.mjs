@@ -48,7 +48,7 @@ cf.addMethod(
 	["java.lang.String[]"],
 	[
 		cf.createCode(2, 1, [
-			cf.createBytecode("getstatic", systemOut), // this obj
+			cf.createBytecode("getstatic", systemOut),
 			cf.createBytecode("ldc", cf.createString("Hello, world!")),
 			cf.createBytecode("invokevirtual", println),
 			cf.createBytecode("return"),
