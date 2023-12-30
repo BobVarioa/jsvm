@@ -17,7 +17,7 @@ Any features with a empty checkbox means they are currently in progress, any ful
 			- [x] `let`, `const`, `var`
 			- [ ] Destructuring
 		- [x] `if`
-		- [ ] `for`
+		- [x] `for`
 		- [ ] `for .. in`
 		- [ ] `for .. of`
 		- [ ] `while`
@@ -56,20 +56,20 @@ Any features with a empty checkbox means they are currently in progress, any ful
 				- [ ] Default
 			- [ ] Arrow
 			- [ ] Generator
-- [ ] Run javascript
-	- [ ] Primative Types
-		- [ ] Number
-		- [ ] Boolean
-		- [ ] String
-	- [ ] Arithmetic
+- [x] Run javascript
+	- [x] Primative Types
+		- [x] Number
+		- [x] Boolean
+		- [x] String
+	- [x] Arithmetic
 	- [ ] Functions
 		- [ ] Return
-	- [ ] Variables
+	- [x] Variables
 		- [ ] Scoping
 	- [ ] Control flow
-		- [ ] If
+		- [x] If
 		- [ ] Loops
-			- [ ] For
+			- [x] For
 			- [ ] While
 			- [ ] Break
 			- [ ] Continue
