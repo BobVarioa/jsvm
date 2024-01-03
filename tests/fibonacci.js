@@ -1,18 +1,15 @@
+// Print the first 20 terms of the Fibonacci sequence
+
 let t1 = 0;
-let t2 = 0;
-let nextTerm = 0;
+let t2 = 1;
+let nextTerm = t1 + t2;
 
-for (let ii = 0; ii < 100000; ii++) {
-	t1 = 0;
-	t2 = 1;
+print(t1);
+print(t2);
+
+for (let i = 3; i <= 20; i++) {
+	print(nextTerm);
+	t1 = t2;
+	t2 = nextTerm;
 	nextTerm = t1 + t2;
-	// console.log(t1);
-	// console.log(t2);
-
-	for (let i = 3; i <= 100000; i++) {
-		// console.log(nextTerm);
-		t1 = t2;
-		t2 = nextTerm;
-		nextTerm = t1 + t2;
-	}
 }
