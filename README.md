@@ -1,5 +1,8 @@
 # jsvm
 
+**Discontinued**, see my [blog post](https://bobvarioa.neocities.org/blog/posts/the-death-of-jsvm/) for more information. In short, check out [Porffor](https://github.com/CanadaHonk/porffor), a project that has similar goals.
+
+
 A "javascript" "vm" project. Currently this is very imcomplete, but the goal for this project is to create something that turns a subset of javascript into jvm bytecode currently, but eventually different formats as well.
 
 ## Rationale
